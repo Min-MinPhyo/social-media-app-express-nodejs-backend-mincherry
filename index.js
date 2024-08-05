@@ -1,5 +1,6 @@
 const express = require("express");
 const app = express();
+require("express-ws")(app)
 
 const prisma=require("./prismaClient")
 
@@ -15,6 +16,11 @@ app.use("/content", contentRouter);
 
 const { userRouter } = require("./routers/user");
 app.use("/", userRouter);
+
+const {wsRouter}=require("./routers/ws")
+app.use("/",wsRouter)
+
+
 
 app.get("/info", (req, res) => {
  res.json({ msg: "api testing" });

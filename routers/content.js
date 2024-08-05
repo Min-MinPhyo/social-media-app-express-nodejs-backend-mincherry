@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 const prisma = require("../prismaClient");
+const {clients}=require("./ws")
 
 const { auth, isOwner } = require("../middlewares/auth");
 
@@ -119,6 +120,13 @@ router.post("/comments", auth, async (req, res) => {
 
   comment.user = user;
 
+  addNoti({
+    type: "comment",
+    content: "reply ur post",
+    postId,
+    userId: user.id,
+  });
+
   res.json(comment);
 });
 
@@ -155,6 +163,13 @@ router.post("/like/posts/:id", auth, async (req, res) => {
       postId: Number(id),
       userId: Number(user.id),
     },
+  });
+
+  addNoti({
+    type: "like",
+    content: "like ur post",
+    postId: id,
+    userId: user.id,
   });
 
   res.json({ like });
@@ -265,4 +280,67 @@ router.get("/following/posts", auth, async (req, res) => {
   });
   res.json(data);
 });
+
+router.get("/notis", auth, async (req, res) => {
+  const user = res.locals.user;
+  const notis = await prisma.noti.findMany({
+    where: {
+      post: {
+        userId: Number(user.id),
+      },
+    },
+    include: {
+      user: true,
+    },
+    orderBy: { id: "desc" },
+    take: 20,
+  });
+
+  res.json(notis);
+});
+
+router.put("/notis/read", auth, async (req, res) => {
+  const user = res.locals.user;
+
+  await prisma.noti.updateMany({
+    where: {
+      post: {
+        userId: Number(user.id),
+      },
+    },
+    data: {
+      read: true,
+    },
+  });
+
+  res.json({ msg: "noti all read" });
+});
+
+async function addNoti({ type, content, postId, userId }) {
+  const post = await prisma.post.findUnique({
+    where: { id: Number(postId) },
+  });
+
+  if (post.userId == userId) return false;
+
+
+  clients.map((client)=>{
+    if(client.userId == post.userId){
+       client.ws.send(JSON.stringify({event:"notis"}))
+       console.log(`ws event to ${client.userId} to notis`)
+    }
+  })
+
+
+
+  return await prisma.noti.create({
+    data: {
+      type,
+      content,
+      postId: Number(postId),
+      userId: Number(userId),
+    },
+  });
+}
+
 module.exports = { contentRouter: router };
